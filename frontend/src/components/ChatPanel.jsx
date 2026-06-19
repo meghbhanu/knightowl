@@ -22,7 +22,7 @@ const MAX_HISTORY = 10  // frontend cap before sending to backend
 export default function ChatPanel({ currentFen, lastMove }) {
     const [messages, setMessages] = useState([])  // { role, content }
     const [displayMessages, setDisplayMessages] = useState([  //what renders
-       { role: 'assistant', label: 'TIP', content: "Hello! I'm KnightOwl, your chess coach. Make a move on the board, describe your position, or ask me anything about chess." }
+       { role: 'assistant', label: null, isCommentary: false, content: "Hello! I'm KnightOwl, your chess coach. Make a move on the board, describe your position, or ask me anything about chess." }
     ])
     const [input, setInput] = useState('')
     const [loading, setLoading] = useState(false)

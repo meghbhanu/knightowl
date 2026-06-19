@@ -29,8 +29,7 @@ export default function BoardPanel({ onMove }) {
 
       setGame(gameCopy)
       setStatus(getStatus(gameCopy))
-      console.log('history:', gameCopy.history())  // add this
-      setMoveHistory(gameCopy.history())
+      setMoveHistory(prev => [...prev, move.san])
 
       onMove({
         san: move.san,
@@ -68,7 +67,7 @@ export default function BoardPanel({ onMove }) {
             boardWidth: 440,
             allowDragging: true,
             allowDragOffBoard: false,
-            showAnimations: false,
+            showAnimations: true,
             isDraggablePiece: ({ piece }) => !!piece,
             customBoardStyle: {
               borderRadius: '8px',
@@ -84,9 +83,15 @@ export default function BoardPanel({ onMove }) {
         {moveHistory.length === 0 && (
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No moves yet</p>
         )}
-        {moveHistory.map((san, i) => (
-          <div key={i} style={{ fontSize: '13px', padding: '2px 0', fontFamily: 'monospace' }}>
-            {i % 2 === 0 ? `${Math.floor(i/2) + 1}. ` : ''}{san}
+        {moveHistory.reduce((pairs, san, i) => {
+          if (i % 2 === 0) pairs.push([san])
+          else pairs[pairs.length - 1].push(san)
+          return pairs
+        }, []).map((pair, i) => (
+          <div key={i} style={styles.movePair}>
+            <span style={styles.moveNum}>{i + 1}.</span>
+            <span style={styles.moveText}>{pair[0]}</span>
+            <span style={styles.moveText}>{pair[1] || ''}</span>
           </div>
         ))}
       </div>
