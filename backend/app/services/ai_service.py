@@ -5,8 +5,6 @@ from anthropic import Anthropic
 from app.services.prompt import get_system_prompt
 from app.schemas.chat import Message
 
-client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-
 MAX_TOKENS = int(os.getenv("MAX_TOKENS_PER_RESPONSE", 400))
 HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", 6))
 
@@ -49,6 +47,7 @@ def get_coaching_response(messages: list[Message]) -> dict:
     2. Call Anthropic with our locked system prompt
     3. Parse and return structured response
     """
+    client = get_client()
     trimmed = trim_history(messages)
 
     # Convert our Pydantic models to Anthropic's expected dict format
@@ -73,4 +72,30 @@ def get_coaching_response(messages: list[Message]) -> dict:
         "label": label,
         "tokens_used": tokens_used,
         "session_id": str(uuid.uuid4())
+    }
+
+def get_move_analysis(san: str, from_sq: str, to_sq: str, fen: str) -> dict:
+    """
+    Lightweight move commentary — 1-2 sentences only.
+    Called automatically on every move, not triggered by user question.
+    """
+    client = get_client()
+
+    prompt = f"""A chess student just played {san} ({from_sq} to {to_sq}).
+    Current position FEN: {fen}
+
+    Give exactly 1-2 sentences of move commentary. Name the chess concept if relevant 
+    (development, control, threat, weakness). Be concise and encouraging. No questions."""
+
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=120,        # hard cap — forces brevity
+        system="""You are KnightOwl, a chess coach giving brief automatic move commentary. 
+                You only respond with 1-2 sentences. No labels, no questions, no markdown. Plain text only.""",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    return {
+        "commentary": response.content[0].text.strip(),
+        "tokens_used": response.usage.input_tokens + response.usage.output_tokens
     }

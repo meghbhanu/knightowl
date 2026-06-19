@@ -2,8 +2,8 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from app.services.ai_service import get_coaching_response
-from app.schemas.chat import Message, ChatRequest, ChatResponse
+from app.services.ai_service import get_coaching_response, get_move_analysis
+from app.schemas.chat import ChatRequest, ChatResponse, MoveAnalysisRequest, MoveAnalysisResponse
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["chat"])
@@ -31,6 +31,19 @@ async def chat(request: Request, body: ChatRequest):
     except Exception as e:
         # Never expose the raw Anthropic error (it may contain key info)
         raise HTTPException(status_code=500, detail="AI service temporarily unavailable. Please try again later.")
+
+@router.post("/analyse", response_model=MoveAnalysisResponse)
+@limiter.limit(f"{MAX_CALLS}/minute")
+async def analyse_move(request: Request, body: MoveAnalysisRequest):
+    """
+    Lightweight automatic move commentary.
+    Called on every move — separate from the chat endpoint.
+    """
+    try:
+        result = get_move_analysis(body.san, body.from_sq, body.to_sq, body.fen)
+        return MoveAnalysisResponse(**result)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="AI service temporarily unavailable")
 
 @router.get("/health")
 async def health_check():
