@@ -3,6 +3,7 @@ import re
 import uuid
 from anthropic import Anthropic
 from app.services.prompt import get_system_prompt
+from app.services.cache import get_cached_response, cache_response
 from app.schemas.chat import Message
 
 MAX_TOKENS = int(os.getenv("MAX_TOKENS_PER_RESPONSE", 400))
@@ -71,7 +72,8 @@ def get_coaching_response(messages: list[Message]) -> dict:
         "reply": clean_reply,
         "label": label,
         "tokens_used": tokens_used,
-        "session_id": str(uuid.uuid4())
+        "session_id": str(uuid.uuid4()),
+        "from_cache": False
     }
 
 def get_move_analysis(san: str, from_sq: str, to_sq: str, fen: str) -> dict:
@@ -84,18 +86,37 @@ def get_move_analysis(san: str, from_sq: str, to_sq: str, fen: str) -> dict:
     prompt = f"""A chess student just played {san} ({from_sq} to {to_sq}).
     Current position FEN: {fen}
 
+    Always ensure your commentary is correctly based off the current position provided.
+    Do not suggest moves that cannot be played at the current position.
+
     Give exactly 1-2 sentences of move commentary. Name the chess concept if relevant 
-    (development, control, threat, weakness). Be concise and encouraging. No questions."""
+    (development, control, threat, weakness). 
+    
+    - If it is a bad move, Be critical and concise. 
+    - If it is a good move, be concise and encouraging.
+    
+    No questions.
+    """
+
+    cached = get_cached_response([{"role": "user", "content": prompt}])
+    if cached:
+        return cached
 
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=120,        # hard cap — forces brevity
         system="""You are KnightOwl, a chess coach giving brief automatic move commentary. 
+                You are critical of moves played, acknowledge bad or good moves with theoretical background.
+                Be mindful of hanging pieces, as this is a common mistake played by students.
                 You only respond with 1-2 sentences. No labels, no questions, no markdown. Plain text only.""",
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
     )
 
-    return {
+    result = {
         "commentary": response.content[0].text.strip(),
         "tokens_used": response.usage.input_tokens + response.usage.output_tokens
     }
+
+    cache_response([{"role": "user", "content": prompt}], result)
+    return result

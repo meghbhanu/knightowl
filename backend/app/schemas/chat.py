@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 class Message(BaseModel):
     role: Literal['user', 'assistant']
@@ -20,7 +20,10 @@ class MoveAnalysisRequest(BaseModel):
     from_sq: str
     to_sq: str
     fen: str
+    session_id: Optional[str] = None
+    move_number: Optional[int] = None
 
 class MoveAnalysisResponse(BaseModel):
     commentary: str
     tokens_used: int    
+    session_id: str
