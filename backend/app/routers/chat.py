@@ -1,8 +1,11 @@
 import os
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
+from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.database import get_db
 from app.services.ai_service import get_coaching_response, get_move_analysis
+from app.services.session_service import get_or_create_session, save_move, save_message
 from app.schemas.chat import ChatRequest, ChatResponse, MoveAnalysisRequest, MoveAnalysisResponse
 
 limiter = Limiter(key_func=get_remote_address)
@@ -12,7 +15,7 @@ MAX_CALLS = int(os.getenv("MAX_CALLS_PER_MINUTE", 20))
 
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit(f"{MAX_CALLS}/minute")
-async def chat(request: Request, body: ChatRequest):
+async def chat(request: Request, body: ChatRequest, db: Session = Depends(get_db)):
     """
     Main coaching endpoint.
     Accepts conversation history, returns AI coaching response    
@@ -26,7 +29,16 @@ async def chat(request: Request, body: ChatRequest):
         raise HTTPException(status_code=400, detail="Last message must be from the user.")
 
     try:
+        game_session = get_or_create_session(db, body.session_id)
         result = get_coaching_response(body.messages)
+        result["session_id"] = game_session.id
+
+        # Persist user message and AI response
+        user_msg = body.messages[-1]
+        save_message(db, game_session.id, "user", user_msg.content)
+        save_message(db, game_session.id, "assistant",
+                     result["reply"], result["label"], result["tokens_used"])
+
         return ChatResponse(**result)
     except Exception as e:
         # Never expose the raw Anthropic error (it may contain key info)
@@ -34,14 +46,24 @@ async def chat(request: Request, body: ChatRequest):
 
 @router.post("/analyse", response_model=MoveAnalysisResponse)
 @limiter.limit(f"{MAX_CALLS}/minute")
-async def analyse_move(request: Request, body: MoveAnalysisRequest):
+async def analyse_move(request: Request, body: MoveAnalysisRequest, db: Session = Depends(get_db)):
     """
     Lightweight automatic move commentary.
     Called on every move — separate from the chat endpoint.
     """
     try:
+        game_session = get_or_create_session(db, body.session_id)
         result = get_move_analysis(body.san, body.from_sq, body.to_sq, body.fen)
-        return MoveAnalysisResponse(**result)
+
+        if body.move_number:
+            save_move(db, game_session.id, body.move_number,
+                      body.san, body.from_sq, body.to_sq, body.fen)
+
+        return MoveAnalysisResponse(
+            commentary=result["commentary"],
+            tokens_used=result["tokens_used"],
+            session_id=game_session.id
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail="AI service temporarily unavailable")
 
