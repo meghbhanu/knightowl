@@ -5,6 +5,7 @@ from anthropic import Anthropic
 from app.services.prompt import get_system_prompt
 from app.services.cache import get_cached_response, cache_response
 from app.schemas.chat import Message
+from app.services.stockfish_service import ( evaluate_position, classify_move, centipawns_to_display )
 
 MAX_TOKENS = int(os.getenv("MAX_TOKENS_PER_RESPONSE", 400))
 HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", 6))
@@ -76,47 +77,81 @@ def get_coaching_response(messages: list[Message]) -> dict:
         "from_cache": False
     }
 
-def get_move_analysis(san: str, from_sq: str, to_sq: str, fen: str) -> dict:
+def get_move_analysis(san: str, from_sq: str, to_sq: str, fen_before: str, 
+                      fen_after: str, move_number: int) -> dict:
     """
-    Lightweight move commentary — 1-2 sentences only.
-    Called automatically on every move, not triggered by user question.
+    1. Evaluate position before and after the move with Stockfish
+    2. Classify move quality based on centipawn change
+    3. Feed engine data into Claude for one cohesive coaching response
     """
     client = get_client()
 
-    prompt = f"""A chess student just played {san} ({from_sq} to {to_sq}).
-    Current position FEN: {fen}
+    eval_before = evaluate_position(fen_before)
+    eval_after = evaluate_position(fen_after)
 
-    Always ensure your commentary is correctly based off the current position provided.
-    Do not suggest moves that cannot be played at the current position.
+    is_white_move = move_number % 2 == 1
+    move_quality = classify_move(
+        eval_before["score"],
+        eval_after["score"],
+        is_white_move
+    )
 
-    Give exactly 1-2 sentences of move commentary. Name the chess concept if relevant 
-    (development, control, threat, weakness). 
+    score_display = centipawns_to_display(
+        eval_after["score"],
+        eval_after["mate_in"]
+    )
+
+    best_move = eval_before["best_move"]
+
+    engine_context = ""
+    if eval_before["score"] is not None and eval_after["score"] is not None:
+        engine_context = f"""
+Engine evaluation before move: {centipawns_to_display(eval_before["score"], eval_before["mate_in"])}
+Engine evaluation after move:  {score_display}
+Move classification:           {move_quality.upper()}
+Engine's preferred move was:   {best_move or "unknown"}
+"""
+    elif eval_after["mate_in"] is not None:
+        engine_context = f"""
+Engine evaluation: {score_display}
+Move classification: {move_quality.upper()}
+"""
+        
+    prompt = f"""A chess student just played {san} (move {move_number}).
+    {engine_context}
+    Current position FEN: {fen_after}
+
+    Give exactly 2-3 sentences of coaching commentary:
+    - Start with the move classification ({move_quality}) and what it means
+    - Explain WHY the move is good or bad using the engine data if available
+    - If it was a mistake or blunder, briefly mention what the engine preferred ({best_move}) and why
+    - Name the chess concept involved (development, tactics, pawn structure, etc.)
+    - Be encouraging but honest
     
-    - If it is a bad move, Be critical and concise. 
-    - If it is a good move, be concise and encouraging.
-    
-    No questions.
-    """
+    No labels, no questions, no markdown. Plain conversational text only."""
 
-    cached = get_cached_response([{"role": "user", "content": prompt}])
+    cache_key_messages = [{"role": "user", "content": prompt}]
+    cached = get_cached_response(cache_key_messages)
     if cached:
+        cached["move_quality"] = move_quality
+        cached["score_display"] = score_display
         return cached
 
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=120,        # hard cap — forces brevity
-        system="""You are KnightOwl, a chess coach giving brief automatic move commentary. 
-                You are critical of moves played, acknowledge bad or good moves with theoretical background.
-                Be mindful of hanging pieces, as this is a common mistake played by students.
-                You only respond with 1-2 sentences. No labels, no questions, no markdown. Plain text only.""",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0
+        max_tokens=150,
+        system="""You are KnightOwl, a chess coach giving move commentary grounded in 
+engine analysis. You have access to Stockfish evaluation data. Be direct and educational.
+Plain text only — no markdown, no bullet points, no labels.""",
+        messages=[{"role": "user", "content": prompt}]
     )
 
     result = {
         "commentary": response.content[0].text.strip(),
-        "tokens_used": response.usage.input_tokens + response.usage.output_tokens
+        "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
+        "move_quality": move_quality,
+        "score_display": score_display
     }
 
-    cache_response([{"role": "user", "content": prompt}], result)
+    cache_response(cache_key_messages, result)
     return result

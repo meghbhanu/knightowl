@@ -19,11 +19,14 @@ class MoveAnalysisRequest(BaseModel):
     san: str
     from_sq: str
     to_sq: str
-    fen: str
+    fen_before: str
+    fen_after: str
     session_id: Optional[str] = None
-    move_number: Optional[int] = None
+    move_number: int = 1
 
 class MoveAnalysisResponse(BaseModel):
     commentary: str
     tokens_used: int    
     session_id: str
+    move_quality: str   # brilliant / good / inaccuracy / mistake / blunder
+    score_display: str  # "+0.3" / "-1.5" / "Mate in 3"

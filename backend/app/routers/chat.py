@@ -53,19 +53,27 @@ async def analyse_move(request: Request, body: MoveAnalysisRequest, db: Session 
     """
     try:
         game_session = get_or_create_session(db, body.session_id)
-        result = get_move_analysis(body.san, body.from_sq, body.to_sq, body.fen)
+        result = get_move_analysis(
+            body.san, body.from_sq, body.to_sq,
+            body.fen_before, body.fen_after,
+            body.move_number
+        )
 
         if body.move_number:
             save_move(db, game_session.id, body.move_number,
-                      body.san, body.from_sq, body.to_sq, body.fen)
+                      body.san, body.from_sq, body.to_sq, body.fen_after)
 
         return MoveAnalysisResponse(
             commentary=result["commentary"],
             tokens_used=result["tokens_used"],
-            session_id=game_session.id
+            session_id=game_session.id,
+            move_quality=result.get("move_quality", "played"),
+            score_display=result.get("score_display", "")
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail="AI service temporarily unavailable")
+        import traceback
+        traceback.print_exc()   
+        raise HTTPException(status_code=502, detail=str(e))
 
 @router.get("/health")
 async def health_check():
