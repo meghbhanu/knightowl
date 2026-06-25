@@ -1,7 +1,35 @@
 import os
+from pathlib import Path
 from stockfish import Stockfish
 
 _stockfish = None
+
+
+def _candidate_stockfish_paths() -> list[str]:
+    env_path = os.getenv("STOCKFISH_PATH")
+    candidates = []
+    if env_path:
+        candidates.append(env_path)
+
+    base_dir = Path(__file__).resolve().parents[1]
+    candidates.extend([
+        str(base_dir / "engines" / "stockfish"),
+        str(base_dir / "engines" / "stockfish.exe"),
+        str(base_dir.parent / "engines" / "stockfish"),
+        str(base_dir.parent / "engines" / "stockfish.exe"),
+        "/app/engines/stockfish",
+        "/app/engines/stockfish.exe",
+    ])
+
+    seen = set()
+    ordered = []
+    for candidate in candidates:
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            ordered.append(candidate)
+    return ordered
+
+
 def get_stockfish() -> Stockfish | None:
     """
     Lazy singleton. Returns None if Stockfish binary not found 
@@ -12,13 +40,14 @@ def get_stockfish() -> Stockfish | None:
     if _stockfish is not None:
         return _stockfish
 
-    binary_path = os.getenv(
-        "STOCKFISH_PATH",
-        os.path.join(os.path.dirname(__file__), "../../engines/stockfish.exe")
-    )
+    binary_path = None
+    for candidate in _candidate_stockfish_paths():
+        if os.path.exists(candidate):
+            binary_path = candidate
+            break
 
-    if not os.path.exists(binary_path):
-        print(f"WARNING: Stockfish binary not found at {binary_path}")
+    if not binary_path:
+        print(f"WARNING: Stockfish binary not found. Checked: {_candidate_stockfish_paths()}")
         return None
     
     try:

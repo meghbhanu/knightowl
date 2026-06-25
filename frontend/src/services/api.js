@@ -15,11 +15,11 @@ export async function sendChatMessage(messages) {
   return response.json()  // { reply, label, tokens_used, session_id }
 }
 
-export async function analyseMoveRequest(san, from_sq, to_sq, fen) {
+export async function analyseMoveRequest(san, from_sq, to_sq, fen_before = '', fen_after = '', move_number = 1, session_id = null) {
   const response = await fetch(`${API_BASE}/analyse`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ san, from_sq, to_sq, fen })
+    body: JSON.stringify({ san, from_sq, to_sq, fen_before, fen_after, move_number, session_id })
   })
 
   if (!response.ok) {

@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+    postgres:
+        image: postgres:15-alpine
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_DB: ${POSTGRES_DB}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+    redis:
+        image: redis:7-alpine
+        command: redis-server --appendonly yes
+        volumes:
+            - redis_data:/data
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 5s
+            timeout: 3s
+            retries: 5
+
+    backend:
+        build: ./backend
+        environment:
+            ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+            DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+            REDIS_URL: redis://redis:6379
+            STOCKFISH_PATH: /app/engines/stockfish
+            MAX_CALLS_PER_MINUTE: ${MAX_CALLS_PER_MINUTE:-20}
+            MAX_TOKENS_PER_RESPONSE: ${MAX_TOKENS_PER_RESPONSE:-400}
+            HISTORY_WINDOW: ${HISTORY_WINDOW:-6}            
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+
+    frontend: 
+        build: ./frontend
+        ports:
+        - "80:80"
+        depends_on:
+            backend:
+                condition: service_healthy
+                                    
+volumes:
+    postgres_data:
+    redis_data:

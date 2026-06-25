@@ -6,6 +6,8 @@ export default function BoardPanel({ onMove }) {
   const [game, setGame] = useState(new Chess())
   const [moveHistory, setMoveHistory] = useState([])
   const [status, setStatus] = useState('White to move')
+  const [fenBeforeMove, setFenBeforeMove] = useState(new Chess().fen())
+  const [moveCount, setMoveCount] = useState(0)
 
   function getStatus(chess) {
     if (chess.isCheckmate()) return `Checkmate! ${chess.turn() === 'w' ? 'Black' : 'White'} wins`
@@ -16,7 +18,8 @@ export default function BoardPanel({ onMove }) {
 
   function onPieceDrop({ sourceSquare, targetSquare, piece }) {
     try {
-      const gameCopy = new Chess(game.fen())
+      const fenBefore = game.fen()
+      const gameCopy = new Chess(fenBefore)
       const move = gameCopy.move({
         from: sourceSquare,
         to: targetSquare,
@@ -27,27 +30,36 @@ export default function BoardPanel({ onMove }) {
         return false
       }
 
+      const newMoveCount = moveCount + 1
+      const fenAfter = gameCopy.fen()
       setGame(gameCopy)
       setStatus(getStatus(gameCopy))
       setMoveHistory(prev => [...prev, move.san])
+      setMoveCount(newMoveCount)
+      setFenBeforeMove(fenBefore)
 
       onMove({
         san: move.san,
         from: move.from,
         to: move.to,
-        fen: gameCopy.fen()
+        fen_before: fenBefore,
+        fen_after: fenAfter,
+        move_number: newMoveCount
       })
 
       return true
     } catch (error) {
-       return false
+      return false
     }
   }
 
   function resetGame() {
-    setGame(new Chess())
+    const freshGame = new Chess()
+    setGame(freshGame)
     setMoveHistory([])
     setStatus('White to move')
+    setMoveCount(0)
+    setFenBeforeMove(freshGame.fen())
   }
 
   return (

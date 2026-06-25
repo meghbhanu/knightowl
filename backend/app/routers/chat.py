@@ -1,5 +1,7 @@
 import os
+import uuid
 from fastapi import APIRouter, HTTPException, Request, Depends
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -40,6 +42,11 @@ async def chat(request: Request, body: ChatRequest, db: Session = Depends(get_db
                      result["reply"], result["label"], result["tokens_used"])
 
         return ChatResponse(**result)
+    except OperationalError:
+        fallback_session_id = body.session_id or str(uuid.uuid4())
+        result = get_coaching_response(body.messages)
+        result["session_id"] = fallback_session_id
+        return ChatResponse(**result)
     except Exception as e:
         # Never expose the raw Anthropic error (it may contain key info)
         raise HTTPException(status_code=500, detail="AI service temporarily unavailable. Please try again later.")
@@ -70,9 +77,21 @@ async def analyse_move(request: Request, body: MoveAnalysisRequest, db: Session 
             move_quality=result.get("move_quality", "played"),
             score_display=result.get("score_display", "")
         )
+    except OperationalError:
+        fallback_session_id = body.session_id or str(uuid.uuid4())
+        result = get_move_analysis(
+            body.san, body.from_sq, body.to_sq,
+            body.fen_before, body.fen_after,
+            body.move_number
+        )
+        return MoveAnalysisResponse(
+            commentary=result["commentary"],
+            tokens_used=result["tokens_used"],
+            session_id=fallback_session_id,
+            move_quality=result.get("move_quality", "played"),
+            score_display=result.get("score_display", "")
+        )
     except Exception as e:
-        import traceback
-        traceback.print_exc()   
         raise HTTPException(status_code=502, detail=str(e))
 
 @router.get("/health")
