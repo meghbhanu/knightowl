@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from stockfish import Stockfish
-from functools import lru_cache
 
 _stockfish = None
 
@@ -68,7 +67,6 @@ def get_stockfish() -> Stockfish | None:
         print(f"WARNING: Stockfish failed to initialise: {e}")
         return None
     
-@lru_cache(maxsize=2048)
 def evaluate_position(fen: str) -> dict:
     """
     Returns evaluation score and best move for a given FEN.
