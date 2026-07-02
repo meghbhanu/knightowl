@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: knightowl-config
+  namespace: knightowl
+data:
+  MAX_CALLS_PER_MINUTE: "20"
+  MAX_TOKENS_PER_RESPONSE: "400"
+  HISTORY_WINDOW: "6"
+  CACHE_TTL_SECONDS: "3600"
+  STOCKFISH_PATH: "/app/engines/stockfish"
+  REDIS_URL: "redis://redis-service:6379"
+  DATABASE_URL: "postgresql://knightowl:knightowl_prod@postgres-service:5432/knightowl"

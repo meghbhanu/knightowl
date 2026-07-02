@@ -32,6 +32,7 @@ export default function BoardPanel({ onMove }) {
 
       const newMoveCount = moveCount + 1
       const fenAfter = gameCopy.fen()
+
       setGame(gameCopy)
       setStatus(getStatus(gameCopy))
       setMoveHistory(prev => [...prev, move.san])

@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1'
 
 export async function sendChatMessage(messages) {
   const response = await fetch(`${API_BASE}/chat`, {
@@ -15,7 +15,7 @@ export async function sendChatMessage(messages) {
   return response.json()  // { reply, label, tokens_used, session_id }
 }
 
-export async function analyseMoveRequest(san, from_sq, to_sq, fen_before = '', fen_after = '', move_number = 1, session_id = null) {
+export async function analyseMoveRequest(san, from_sq, to_sq, fen_before, fen_after, move_number, session_id) {
   const response = await fetch(`${API_BASE}/analyse`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
