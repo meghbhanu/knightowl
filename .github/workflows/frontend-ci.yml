@@ -2,12 +2,12 @@ name: Frontend CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-ci.yml'
   pull_request:
-    branches: [main]
+    branches: [master]
     paths:
       - 'frontend/**'
 
@@ -45,7 +45,7 @@ jobs:
     name: Build and Push Image
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
 
     permissions:
       contents: write
