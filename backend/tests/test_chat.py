@@ -7,12 +7,26 @@ from app.database import normalize_database_url
 
 client = TestClient(app)
 
+with patch('app.database.create_engine'), \
+     patch('app.database.SessionLocal'), \
+     patch('app.redis_client.get_redis'):
+    from app.main import app
+
 def mock_ai_response():
     return {
         "reply": "Consider controlling the center with your pawns. What square do you want to dominate?",
         "label": "TIP",
         "tokens_used": 85,
-        "session_id": "test-session-123"
+        "session_id": "test-session-123",
+        "from_cache": False
+    }
+
+def mock_analysis_response():
+    return {
+        "commentary": "Good developing move, controlling the center.",
+        "tokens_used": 60,
+        "move_quality": "good",
+        "score_display": "+0.3"
     }
 
 def test_normalize_database_url_rewrites_local_postgres_host():
@@ -44,15 +58,42 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
-def test_chat_endpoint_success():
-    with patch("app.routers.chat.get_coaching_response", return_value=mock_ai_response()):
+def test_chat_health():
+    response = client.get("/api/v1/health")
+    assert response.status_code == 200
+
+def test_chat_success():
+    with patch("app.routers.chat.get_coaching_response",
+               return_value=mock_coaching_response()), \
+         patch("app.routers.chat.get_or_create_session",
+               return_value=MagicMock(id="test-session-123")), \
+         patch("app.routers.chat.save_message"):
         response = client.post("/api/v1/chat", json={
-            "messages": [{"role": "user", "content": "Is e4 a good opening move?"}]
+            "messages": [{"role": "user", "content": "Is e4 a good opening?"}]
         })
     assert response.status_code == 200
     data = response.json()
     assert "reply" in data
     assert data["label"] in ["CRITIQUE", "PLAN", "OPENING", "TIP"]
+
+def test_analyse_success():
+    with patch("app.routers.chat.get_move_analysis",
+               return_value=mock_analysis_response()), \
+         patch("app.routers.chat.get_or_create_session",
+               return_value=MagicMock(id="test-session-123")), \
+         patch("app.routers.chat.save_move"):
+        response = client.post("/api/v1/analyse", json={
+            "san": "e4",
+            "from_sq": "e2",
+            "to_sq": "e4",
+            "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1",
+            "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+            "move_number": 1
+        })
+    assert response.status_code == 200
+    data = response.json()
+    assert "commentary" in data
+    assert "move_quality" in data
 
 def test_chat_rejects_empty_messages():
     response = client.post("/api/v1/chat", json={"messages": []})
