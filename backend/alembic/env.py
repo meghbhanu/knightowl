@@ -49,7 +49,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    print(f"[ALEMBIC] Using database URL: {url[:30]}... (offline mode)")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -68,8 +69,17 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    database_url = os.getenv("DATABASE_URL")
+    print(f"[ALEMBIC] DATABASE_URL env var: {database_url[:30] if database_url else 'NOT SET'}...")
+    
+    if database_url:
+        configuration = {"sqlalchemy.url": database_url}
+    else:
+        configuration = config.get_section(config.config_ini_section, {})
+        print(f"[ALEMBIC] Using alembic.ini URL: {configuration.get('sqlalchemy.url', 'NOT SET')[:30]}...")
+    
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

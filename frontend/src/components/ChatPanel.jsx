@@ -20,7 +20,8 @@ const QUICK_CHIPS = [
 const MAX_HISTORY = 10  // frontend cap before sending to backend
 
 export default function ChatPanel({ currentFen, lastMove }) {
-    const [messages, setMessages] = useState([])  // { role, content }
+  const [sessionId, setSessionId] = useState(null)  
+  const [messages, setMessages] = useState([])  // { role, content }
     const [displayMessages, setDisplayMessages] = useState([  //what renders
        { role: 'assistant', label: null, isCommentary: false, content: "Hello! I'm KnightOwl, your chess coach. Make a move on the board, describe your position, or ask me anything about chess." }
     ])
@@ -44,12 +45,25 @@ export default function ChatPanel({ currentFen, lastMove }) {
   async function analyseMove(move) {
     setAnalysing(true)
     try {
-      const data = await analyseMoveRequest(move.san, move.from, move.to, move.fen)
+      const data = await analyseMoveRequest(
+        move.san,
+        move.from,
+        move.to,
+        move.fen_before,
+        move.fen_after,
+        move.move_number,
+        sessionId
+      )
+
+      if (!sessionId && data.session_id) setSessionId(data.session_id)
+
       setDisplayMessages(prev => [...prev, {
         role: 'assistant',
         label: null,
         isCommentary: true,
-        content: data.commentary
+        content: data.commentary,
+        move_quality: data.move_quality,
+        score_display: data.score_display
       }])
       setTokenCount(prev => prev + data.tokens_used)
     } catch (err) {
@@ -99,6 +113,18 @@ export default function ChatPanel({ currentFen, lastMove }) {
         }
     }
 
+function getQualityStyle(quality) {
+  const styles = {
+    brilliant: { background: '#dbeafe', color: '#1e40af' },
+    good:      { background: '#dcfce7', color: '#166534' },
+    inaccuracy:{ background: '#fef9c3', color: '#854d0e' },
+    mistake:   { background: '#ffedd5', color: '#9a3412' },
+    blunder:   { background: '#fee2e2', color: '#991b1b' },
+    played:    { background: '#f3f4f6', color: '#374151' },
+  }
+  return styles[quality] || styles.played
+}
+
   return (
     <div style={styles.panel}>
       <div style={styles.header}>
@@ -111,6 +137,19 @@ export default function ChatPanel({ currentFen, lastMove }) {
           <div key={i} style={msg.role === 'user' ? styles.userBubbleWrap : styles.botBubbleWrap}>
             {msg.role === 'assistant' && (
               <div style={msg.isCommentary ? styles.commentaryBubble : styles.botBubble}>
+                {msg.move_quality && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                    <span style={{
+                      ...styles.qualityBadge,
+                      ...getQualityStyle(msg.move_quality)
+                    }}>
+                      {msg.move_quality}
+                    </span>
+                    {msg.score_display && (
+                      <span style={styles.scoreDisplay}>{msg.score_display}</span>
+                    )}
+                  </div>
+                )}
                 {msg.label && (
                   <span style={{
                     ...styles.label,
@@ -207,4 +246,6 @@ const styles = {
   inputRow: { display: 'flex', gap: '8px', padding: '12px', borderTop: '1px solid var(--border)', alignItems: 'flex-end' },
   textarea: { flex: 1, resize: 'none', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '14px', fontFamily: 'var(--font)', outline: 'none' },
   sendBtn: { width: '38px', height: '38px', borderRadius: '8px', background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '18px' },
+  qualityBadge: { fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px', textTransform: 'capitalize' },
+  scoreDisplay: { fontSize: '12px', fontFamily: 'monospace', color: 'var(--text-secondary)' },
 }

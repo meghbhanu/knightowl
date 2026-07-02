@@ -1,7 +1,36 @@
 import os
+from pathlib import Path
 from stockfish import Stockfish
+from functools import lru_cache
 
 _stockfish = None
+
+
+def _candidate_stockfish_paths() -> list[str]:
+    env_path = os.getenv("STOCKFISH_PATH")
+    candidates = []
+    if env_path:
+        candidates.append(env_path)
+
+    base_dir = Path(__file__).resolve().parents[1]
+    candidates.extend([
+        str(base_dir / "engines" / "stockfish"),
+        str(base_dir / "engines" / "stockfish.exe"),
+        str(base_dir.parent / "engines" / "stockfish"),
+        str(base_dir.parent / "engines" / "stockfish.exe"),
+        "/app/engines/stockfish",
+        "/app/engines/stockfish.exe",
+    ])
+
+    seen = set()
+    ordered = []
+    for candidate in candidates:
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            ordered.append(candidate)
+    return ordered
+
+
 def get_stockfish() -> Stockfish | None:
     """
     Lazy singleton. Returns None if Stockfish binary not found 
@@ -12,23 +41,26 @@ def get_stockfish() -> Stockfish | None:
     if _stockfish is not None:
         return _stockfish
 
-    binary_path = os.getenv(
-        "STOCKFISH_PATH",
-        os.path.join(os.path.dirname(__file__), "../../engines/stockfish.exe")
-    )
+    binary_path = None
+    for candidate in _candidate_stockfish_paths():
+        if os.path.exists(candidate):
+            binary_path = candidate
+            break
 
-    if not os.path.exists(binary_path):
-        print(f"WARNING: Stockfish binary not found at {binary_path}")
+    if not binary_path:
+        print(f"WARNING: Stockfish binary not found. Checked: {_candidate_stockfish_paths()}")
         return None
     
     try:
         _stockfish = Stockfish(
             path=binary_path,
-            depth=15,           # how many moves ahead to calculate
+            depth=10,           # slightly lower depth for faster lightweight analysis
+            turn_perspective=False,
+            num_nodes=200000,
             parameters={
                 "Threads": 2,
-                "Minimum Thinking Time": 30,
-                "Skill Level": 20   # max strength
+                "Minimum Thinking Time": 10,
+                "Skill Level": 20   # maximum strength
             }
         )
         return _stockfish
@@ -36,6 +68,7 @@ def get_stockfish() -> Stockfish | None:
         print(f"WARNING: Stockfish failed to initialise: {e}")
         return None
     
+@lru_cache(maxsize=2048)
 def evaluate_position(fen: str) -> dict:
     """
     Returns evaluation score and best move for a given FEN.
@@ -48,7 +81,26 @@ def evaluate_position(fen: str) -> dict:
         return {"score": None, "best_move": None, "mate_in": None}
 
     try:
+        sf.set_turn_perspective(False)
         sf.set_fen_position(fen)
+
+        top_moves = sf.get_top_moves(2, verbose=True)
+        if top_moves:
+            best = top_moves[0]
+            score = None
+            mate_in = None
+            if best.get("Centipawn") is not None:
+                score = int(best["Centipawn"])
+            elif best.get("Mate") is not None:
+                mate_in = int(best["Mate"])
+
+            return {
+                "score": score,
+                "best_move": best.get("Move"),
+                "mate_in": mate_in,
+                "top_moves": top_moves
+            }
+
         evaluation = sf.get_evaluation()
         best_move = sf.get_best_move()
 
@@ -63,14 +115,18 @@ def evaluate_position(fen: str) -> dict:
         return {
             "score": score,
             "best_move": best_move,
-            "mate_in": mate_in
+            "mate_in": mate_in,
+            "top_moves": []
         }
     except Exception as e:
         print(f"Stockfish evaluation error: {e}")
         return {"score": None, "best_move": None, "mate_in": None}
 
-def classify_move(score_before: int | None, score_after: int | None, 
-                  is_white_move: bool) -> str:
+def classify_move(score_before: int | None, score_after: int | None,
+                  is_white_move: bool,
+                  actual_move: str | None = None,
+                  best_move: str | None = None,
+                  top_moves: list[dict[str, str | int | None]] | None = None) -> str:
     """
     Classify move quality based on centipawn loss.
     Scores are always from white's perspective, so we
@@ -85,16 +141,26 @@ def classify_move(score_before: int | None, score_after: int | None,
     else:
         delta = score_before - score_after  # positive = improvement for black
 
-    if delta >= 50:
-        return "brilliant"
-    elif delta >= 0:
+    print( "%s\t%s\t%s\n", score_before, score_after, delta )
+
+    if actual_move and best_move and actual_move == best_move:
         return "good"
-    elif delta >= -50:
+    if actual_move and top_moves:
+        top_uci = [move.get("Move") for move in top_moves if move.get("Move")]
+        if actual_move in top_uci:
+            if delta >= -50:
+                return "good"
+            return "inaccuracy"
+
+    if abs(delta) <= 20:
+        return "good"
+    if delta > 20:
+        return "brilliant"
+    if delta >= -75:
         return "inaccuracy"
-    elif delta >= -150:
+    if delta >= -175:
         return "mistake"
-    else:
-        return "blunder"
+    return "blunder"
 
 def centipawns_to_display(score: int | None, mate_in: int | None) -> str:
     """Convert raw engine score to human-readable string."""

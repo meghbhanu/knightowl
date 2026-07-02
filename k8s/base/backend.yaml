@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: knightowl
+spec:
+  replicas: 2        # two replicas for availability
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: knightowl-backend:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: knightowl-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: knightowl-config
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: knightowl-config
+                  key: REDIS_URL
+            - name: STOCKFISH_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: knightowl-config
+                  key: STOCKFISH_PATH
+            - name: MAX_CALLS_PER_MINUTE
+              valueFrom:
+                configMapKeyRef:
+                  name: knightowl-config
+                  key: MAX_CALLS_PER_MINUTE
+            - name: MAX_TOKENS_PER_RESPONSE
+              valueFrom:
+                configMapKeyRef:
+                  name: knightowl-config
+                  key: MAX_TOKENS_PER_RESPONSE
+            - name: HISTORY_WINDOW
+              valueFrom:
+                configMapKeyRef:
+                  name: knightowl-config
+                  key: HISTORY_WINDOW
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: knightowl
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP
