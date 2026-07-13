@@ -21,6 +21,11 @@ def mock_ai_response():
         "from_cache": False
     }
 
+
+def mock_coaching_response():
+    return mock_ai_response()
+
+
 def mock_analysis_response():
     return {
         "commentary": "Good developing move, controlling the center.",
