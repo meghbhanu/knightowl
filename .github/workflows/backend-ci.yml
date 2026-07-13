@@ -38,6 +38,7 @@ jobs:
       - name: Run tests
         env:
           PYTHONPATH: .
+          DATABASE_URL: postgresql://knightowl:knightowl_dev@localhost:5432/knightowl
         run: |
           cd backend
           python -m pytest tests/ -v --tb=short
