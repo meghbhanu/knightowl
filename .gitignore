@@ -2,8 +2,9 @@
 __pycache__/
 *.pyc
 .env
-venv/
 .venv/
+venv/
+.pytest_cache/
 
 # Node
 node_modules/
@@ -15,3 +16,14 @@ dist/
 # IDE
 .vscode/
 .idea/
+
+# Secrets
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Stockfish Windows binary (use git lfs for the Linux one)
+backend/engines/stockfish.exe
