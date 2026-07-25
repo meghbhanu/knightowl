@@ -41,14 +41,19 @@ async def chat(request: Request, body: ChatRequest, db: Session = Depends(get_db
             detail="Daily coaching limit reached. Please try again tomorrow."
         )
 
-    game_session = get_or_create_session(db, body.session_id)
-
-    has_budget, calls_remaining = check_session_budget(db, game_session.id)
-    if not has_budget:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Session limit reached. Click 'New game' to start a fresh session."
-        )
+    try:
+        game_session = get_or_create_session(db, body.session_id)
+        has_budget, calls_remaining = check_session_budget(db, game_session.id)
+        if not has_budget:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Session limit reached. Click 'New game' to start a fresh session."
+            )
+    except OperationalError:
+        fallback_session_id = body.session_id or str(uuid.uuid4())
+        result = get_coaching_response(body.messages)
+        result["session_id"] = fallback_session_id
+        return ChatResponse(**result)
 
     try:
         result = get_coaching_response(body.messages)
@@ -94,13 +99,28 @@ async def analyse_move(request: Request, body: MoveAnalysisRequest, db: Session 
             detail="Daily coaching limit reached. Please try again tomorrow."
         )
 
-    game_session = get_or_create_session(db, body.session_id)
-
-    has_budget, calls_remaining = check_session_budget(db, game_session.id)
-    if not has_budget:
-        raise HTTPException(
-            status_code=429,
-            detail="Session limit reached. Click 'New game' to start a fresh session."
+    try:
+        game_session = get_or_create_session(db, body.session_id)
+        has_budget, calls_remaining = check_session_budget(db, game_session.id)
+        if not has_budget:
+            raise HTTPException(
+                status_code=429,
+                detail="Session limit reached. Click 'New game' to start a fresh session."
+            )
+    except OperationalError:
+        fallback_session_id = body.session_id or str(uuid.uuid4())
+        result = get_move_analysis(
+            body.san, body.from_sq, body.to_sq,
+            body.fen_before, body.fen_after,
+            body.move_number
+        )
+        return MoveAnalysisResponse(
+            commentary=result["commentary"],
+            tokens_used=result["tokens_used"],
+            session_id=fallback_session_id,
+            move_quality=result.get("move_quality", "played"),
+            score_display=result.get("score_display", ""),
+            calls_remaining=50
         )
 
     try:
