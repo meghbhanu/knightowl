@@ -7,7 +7,11 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.database import get_db
 from app.services.ai_service import get_coaching_response, get_move_analysis
-from app.services.session_service import get_or_create_session, save_move, save_message
+from app.services.session_service import (
+    get_or_create_session, check_session_budget,
+    increment_session_usage, save_move, save_message
+)
+from app.services.cache import check_global_budget
 from app.schemas.chat import ChatRequest, ChatResponse, MoveAnalysisRequest, MoveAnalysisResponse
 
 limiter = Limiter(key_func=get_remote_address)
@@ -30,8 +34,23 @@ async def chat(request: Request, body: ChatRequest, db: Session = Depends(get_db
     if body.messages[-1].role != "user":
         raise HTTPException(status_code=400, detail="Last message must be from the user.")
 
+    global_ok, _ = check_global_budget()
+    if not global_ok:
+        raise HTTPException(
+            status_code=429,
+            detail="Daily coaching limit reached. Please try again tomorrow."
+        )
+
+    game_session = get_or_create_session(db, body.session_id)
+
+    has_budget, calls_remaining = check_session_budget(db, game_session.id)
+    if not has_budget:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Session limit reached. Click 'New game' to start a fresh session."
+        )
+
     try:
-        game_session = get_or_create_session(db, body.session_id)
         result = get_coaching_response(body.messages)
         result["session_id"] = game_session.id
 
@@ -40,8 +59,17 @@ async def chat(request: Request, body: ChatRequest, db: Session = Depends(get_db
         save_message(db, game_session.id, "user", user_msg.content)
         save_message(db, game_session.id, "assistant",
                      result["reply"], result["label"], result["tokens_used"])
+        increment_session_usage(db, game_session.id, result["tokens_used"])
 
-        return ChatResponse(**result)
+        _, remaining_after = check_session_budget(db, game_session.id)
+
+        return ChatResponse(
+            reply=result["reply"],
+            label=result["label"],
+            tokens_used=result["tokens_used"],
+            session_id=game_session.id,
+            calls_remaining=remaining_after
+        )
     except OperationalError:
         fallback_session_id = body.session_id or str(uuid.uuid4())
         result = get_coaching_response(body.messages)
@@ -58,8 +86,24 @@ async def analyse_move(request: Request, body: MoveAnalysisRequest, db: Session 
     Lightweight automatic move commentary.
     Called on every move — separate from the chat endpoint.
     """
+
+    global_ok, _ = check_global_budget()
+    if not global_ok:
+        raise HTTPException(
+            status_code=429,
+            detail="Daily coaching limit reached. Please try again tomorrow."
+        )
+
+    game_session = get_or_create_session(db, body.session_id)
+
+    has_budget, calls_remaining = check_session_budget(db, game_session.id)
+    if not has_budget:
+        raise HTTPException(
+            status_code=429,
+            detail="Session limit reached. Click 'New game' to start a fresh session."
+        )
+
     try:
-        game_session = get_or_create_session(db, body.session_id)
         result = get_move_analysis(
             body.san, body.from_sq, body.to_sq,
             body.fen_before, body.fen_after,
@@ -70,12 +114,16 @@ async def analyse_move(request: Request, body: MoveAnalysisRequest, db: Session 
             save_move(db, game_session.id, body.move_number,
                       body.san, body.from_sq, body.to_sq, body.fen_after)
 
+        increment_session_usage(db, game_session.id, result["tokens_used"])
+        _, remaining_after = check_session_budget(db, game_session.id)
+
         return MoveAnalysisResponse(
             commentary=result["commentary"],
             tokens_used=result["tokens_used"],
             session_id=game_session.id,
             move_quality=result.get("move_quality", "played"),
-            score_display=result.get("score_display", "")
+            score_display=result.get("score_display", ""),
+            calls_remaining=remaining_after
         )
     except OperationalError:
         fallback_session_id = body.session_id or str(uuid.uuid4())
@@ -93,6 +141,16 @@ async def analyse_move(request: Request, body: MoveAnalysisRequest, db: Session 
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+@router.get("/session/{session_id}/budget")
+async def get_session_budget(session_id: str, db: Session = Depends(get_db)):
+    """Frontend calls this on load to restore session state."""
+    has_budget, calls_remaining = check_session_budget(db, session_id)
+    return {
+        "session_id": session_id,
+        "calls_remaining": calls_remaining,
+        "has_budget": has_budget
+    }
 
 @router.get("/health")
 async def health_check():

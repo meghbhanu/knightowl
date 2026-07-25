@@ -14,6 +14,7 @@ class ChatResponse(BaseModel):
     label: Literal["CRITIQUE", "PLAN", "OPENING", "TIP"]
     tokens_used: int
     session_id: str
+    calls_remaining: int    # frontend uses this to show budget
 
 class MoveAnalysisRequest(BaseModel):
     san: str
@@ -30,3 +31,4 @@ class MoveAnalysisResponse(BaseModel):
     session_id: str
     move_quality: str   # brilliant / good / inaccuracy / mistake / blunder
     score_display: str  # "+0.3" / "-1.5" / "Mate in 3"
+    calls_remaining: int

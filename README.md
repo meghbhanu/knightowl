@@ -21,16 +21,16 @@ the same approach Chess.com uses for game review, delivered move by move as you 
 │  react-chessboard│     │                                      │
 │    chess.js     │     │  ┌─────────────┐  ┌───────────────┐  │
 └─────────────────┘     │  │  Stockfish  │  │ Anthropic API │  │
-│  │  (engine)   │──▶  Claude AI   │  │
-│  └─────────────┘  └───────────────┘  │
-│         │                             │
-│  ┌──────▼──────┐  ┌───────────────┐  │
-│  │ PostgreSQL  │  │     Redis     │  │
-│  │  Sessions  │  │    Cache      │  │
-│  │   Moves    │  │ Rate Limiting │  │
-│  │  Messages  │  └───────────────┘  │
-│  └─────────────┘                     │
-└──────────────────────────────────────┘
+                        │  │  (engine)   │──▶  Claude AI   │  │
+                        │  └─────────────┘  └───────────────┘  │
+                        │         │                             │
+                        │  ┌──────▼──────┐  ┌───────────────┐  │
+                        │  │ PostgreSQL  │  │     Redis     │  │
+                        │  │  Sessions  │    │    Cache      │  │
+                        │  │   Moves    │    │ Rate Limiting │  │
+                        │  │  Messages  │    └───────────────┘  │
+                        │  └─────────────┘                     │
+                        └──────────────────────────────────────┘
 
 ## Tech Stack
 

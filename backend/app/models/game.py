@@ -15,7 +15,10 @@ class GameSession(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     final_fen = Column(Text, nullable=True)
     status = Column(String, default="active")  # active, completed, abandoned
-
+    total_tokens_used = Column(Integer, default=0)
+    total_api_calls = Column(Integer, default=0)
+    max_api_calls = Column(Integer, default=50)
+    
     moves = relationship("Move", back_populates="session", cascade="all, delete-orphan")
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
 
