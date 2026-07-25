@@ -53,7 +53,13 @@ async def chat(request: Request, body: ChatRequest, db: Session = Depends(get_db
         fallback_session_id = body.session_id or str(uuid.uuid4())
         result = get_coaching_response(body.messages)
         result["session_id"] = fallback_session_id
-        return ChatResponse(**result)
+        return ChatResponse(
+            reply=result["reply"],
+            label=result["label"],
+            tokens_used=result["tokens_used"],
+            session_id=fallback_session_id,
+            calls_remaining=50
+        )
 
     try:
         result = get_coaching_response(body.messages)
@@ -79,7 +85,13 @@ async def chat(request: Request, body: ChatRequest, db: Session = Depends(get_db
         fallback_session_id = body.session_id or str(uuid.uuid4())
         result = get_coaching_response(body.messages)
         result["session_id"] = fallback_session_id
-        return ChatResponse(**result)
+        return ChatResponse(
+            reply=result["reply"],
+            label=result["label"],
+            tokens_used=result["tokens_used"],
+            session_id=fallback_session_id,
+            calls_remaining=50
+        )
     except Exception as e:
         # Never expose the raw Anthropic error (it may contain key info)
         raise HTTPException(status_code=500, detail="AI service temporarily unavailable. Please try again later.")
@@ -157,7 +169,8 @@ async def analyse_move(request: Request, body: MoveAnalysisRequest, db: Session 
             tokens_used=result["tokens_used"],
             session_id=fallback_session_id,
             move_quality=result.get("move_quality", "played"),
-            score_display=result.get("score_display", "")
+            score_display=result.get("score_display", ""),
+            calls_remaining=50
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
