@@ -1,9 +1,9 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, Request
+import os
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -13,11 +13,17 @@ limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="KnightOwl Chess Tutor API",
-    description="AI-powered chess coaching",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs" if os.getenv("ENV") != "production" else None,
+    redoc_url=None
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://localhost:3000"
+).split(",")
 
 app.add_middleware(
     CORSMiddleware,

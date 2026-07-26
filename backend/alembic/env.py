@@ -6,7 +6,7 @@ load_dotenv()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from app.database import Base
+from app.database import Base, normalize_database_url
 from app.models import game
 
 from logging.config import fileConfig
@@ -69,7 +69,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    database_url = os.getenv("DATABASE_URL")
+    database_url = normalize_database_url(os.getenv("DATABASE_URL"))
     print(f"[ALEMBIC] DATABASE_URL env var: {database_url[:30] if database_url else 'NOT SET'}...")
     
     if database_url:
